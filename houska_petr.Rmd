@@ -1,0 +1,227 @@
+---
+title: "NMAI059"
+author: "Petr Houška"
+date: "30\\. ledna 2016"
+output: pdf_document
+---
+
+First I had set the RNG seed to an appropriate value.
+```{r}
+set.seed(28101994)
+```
+
+
+#1) Simuation:
+The simulation is quite simple. It is divided into two functions for clarity and possible vectorization. The first one simulates one day's worth of progress at one place. The second one handles overall simulation for an arbitrary number of days, in an arbitrary number of places with arbitrary population of starting zombies.
+```{r}
+nextDaysZombies <- function(numberOfZombies) {
+  victimsVec <- rpois(numberOfZombies, lambda=5)
+  victims <- sum(victimsVec)
+  newZombies <- rbinom(1, victims, 0.5)
+  return(newZombies + numberOfZombies)
+}
+
+#Note that number of zombies can be a vector
+zombiesNthDay <- function(numberOfZombies, days) {
+  while(days > 0){
+    numberOfZombies <- sapply(numberOfZombies, nextDaysZombies)
+    days <- days - 1
+  }
+  return(numberOfZombies)
+}
+```
+
+Given the simulation above a possible number of zombies at the end of 8th day is following:
+```{r}
+zombiesNthDay(1, days=7)
+```
+
+
+#2) Simple model
+First we need to create some data for our simulation. Specificaly we need a to simulate 8 days at 100 independent places each with one starting zombie. 
+```{r}
+zombieData <- zombiesNthDay(rep(1, 100), days=7)
+
+```
+
+
+##2.a) Expected value estimate
+The expected value can be estimated in a number of ways. A surely valid way of getting point estimate is computing mean of the simulated data. Such estimation is both unbiased and consistent. We can also do an interval estimation of expected value. Presented below are two ways to do that. We can either use an inbuild t.test which is definitely a more suitable solution since $n$ is not very high and variation of our data is unknown or we can do it by hand using CLT and an unbiased estimator for the variance (this approach is also fine thanks to Slutsky's theorem).
+```{r}
+paste("Point estimate: ", mean(zombieData))
+t.test(zombieData)
+
+intrervalDiviation <- qnorm(0.975)*sqrt(var(zombieData) / length(zombieData))
+paste("CLT 95 % estimate: ", 
+      mean(zombieData) - intrervalDiviation, 
+      mean(zombieData) + intrervalDiviation
+      )
+```
+
+##2.b) Expected value hypothesis
+Yes, it is possible because 6 000 isn't in either of our 95 % intervals. Which means, that in case expected value is 6 000, the probability of getting the same data we got is lower than 5 percent (assuming we forget the parameters we used for the data generation).
+
+##2.c) Histogram
+Histogram of data:
+```{r}
+hist(zombieData, xlim = c(0, max(zombieData)), 
+     breaks = seq(0, max(zombieData), max(zombieData)/15),
+     main=paste("Number of zombies in individual places"), 
+     xlab=paste("Number of zombies" ), ylab=paste("Number of places" )
+     )
+```
+It seems that our data is normally-ish distributed but the variance is a bit too large and our number of observations is a bit too low for a asymptotic behaviour to work. 
+
+##2.d) Shapiro test
+```{r}
+shapiro.test(zombieData)
+```
+Shapiro test rejected the hypothesis that our data is normally distributed on 99.8713% level of confidence.
+
+##2.e Histogram with normal curve
+The line shows how the histogram would look like were the data truly normally distributed. It is worth noting that it's actually quite close so despite the fact that shapiro test rejected the normality of our data it is possible that with only slightly higher number of observation (places) the data might actually follow normal distribution.
+```{r}
+hist(zombieData, xlim = c(0, max(zombieData)), 
+     breaks = seq(0, max(zombieData), max(zombieData)/15),
+     main=paste("Number of zombies in individual places"), 
+     xlab=paste("Number of zombies" ), ylab=paste("Number of places" )
+    )
+curve(
+  dnorm(x, mean = mean(zombieData), sd = sqrt(var(zombieData)))
+  *(max(zombieData)/15) *length(zombieData), 
+    #The "*(max(zombieData)/15) *length(zombieData)" transformation is necessary  
+    #  because we want the area under the curve to be the same 
+    #  as the area under the histogram.
+  from = 0, to = max(zombieData), add = TRUE,
+  col = "blue"
+  )
+```
+
+
+#3) Advanced model:
+Advanced model is slightly more complicated espacially due to the requirement to simulate all encounters between a zombie and it's potential victim sequentially. 
+```{r}
+simulateZombieAdv <- function(numberOfVictims, pKill) {
+  newZombies <- 0
+  for(i in 1:numberOfVictims){
+    
+    bitten <- rbinom(1, 1, 0.5)
+    if(bitten == 0) {
+      
+      killed <- rbinom(1, 1, pKill)
+      if(killed == 1) { return(newZombies - 1) }
+      
+    } 
+    else{
+      newZombies <- newZombies + 1
+    }
+  }
+  
+  return(newZombies)
+}
+
+nextDaysZombiesAdv <- function(numberOfZombies, pKill) {
+  victimsVec <- rpois(numberOfZombies, lambda=5)
+  newZombiesVec <- sapply(victimsVec, simulateZombieAdv, pKill=pKill)
+  newZombies <- sum(newZombiesVec)
+  return(newZombies + numberOfZombies)
+}
+
+zombiesNthDayAdv <- function(numberOfZombies, days, pKill = 1/5) {
+  while(days > 0){
+    numberOfZombies[numberOfZombies > 0] <- sapply(
+      numberOfZombies[numberOfZombies > 0], 
+      nextDaysZombiesAdv, pKill=pKill)
+    days <- days - 1
+  }
+  return(numberOfZombies)
+}
+```
+
+As with second exercise the high level simulation function accepts a vector of default zombie populations and a number of days.
+```{r}
+zombieDataAdv <- zombiesNthDayAdv(rep(1, 100), days=7)
+```
+
+##3.a) Expected value estimate
+Again, there are many ways to get an estimate for the expected value. Shown below are two interval estimates and one point estimate.
+```{r}
+paste("Point estimate: ", mean(zombieDataAdv))
+t.test(zombieDataAdv)
+
+intrervalDiviationAdv <- qnorm(0.975)*sqrt(var(zombieDataAdv) / length(zombieDataAdv))
+paste("CLT 95 % estimate: ", 
+      mean(zombieDataAdv) - intrervalDiviationAdv, 
+      mean(zombieDataAdv) + intrervalDiviationAdv
+      )
+```
+
+##3.b) Histogram
+```{r}
+hist(zombieDataAdv, 
+     xlim = c(0, max(zombieDataAdv)), 
+     breaks = seq(0, max(zombieDataAdv), max(zombieDataAdv)/15),
+     main=paste("Number of zombies in individual places"), 
+     xlab=paste("Number of zombies" ), ylab=paste("Number of places")
+    )
+```
+ 
+##3.c) Probability of small number of zombies
+We can estimate the probability as a ratio between the number of places that satify our condition and all places. Such estimate is defnitely unbiased and consistent though it's probably not the best one possible.
+```{r}
+length(zombieDataAdv[zombieDataAdv <= 1000]) / length(zombieDataAdv)
+```
+
+##3.d) Minimum required probability to kill a zombie
+There are many ways to estimate the minimum required probability to kill a zombie so that the infection is stopped in at least 10 % places. The one I chose provides, at least in my opinion, a good balance betwen speed and precision.
+
+My approach is based on the assumption that estimating the expected percentage of places where infection has been stopped by calculating the ratio from simulated data is good enough. Given this assumption I simply search for the required minimum percentage by a binary search. I start with boundaries of 0 and 1 and run the simulation with their mean. If the resulting ratio of places where infection has been stopped is lower than 10 % then I update the lower boundary to the one currently tested. If the ratio is higher than 10 % I update the upper boundary. 
+
+Due to the fact that the simulation is not very fast I go only run 5 iterations which gives us precision of $1 \over 2^{5}$. If we had more time or computing power we could consider the result of this method a random variable and compute its interval estimate using t.test or CLT.
+```{r}
+
+computeMinimumReqKillProbability <- function(percOfCleanPlaces, maxDepth, numOfObser){
+  pMaxKill = 1
+  pMinKill = 0
+
+  iterations <- maxDepth
+  
+  repeat {
+    pCurrKill = (pMaxKill + pMinKill) / 2
+    pLastWorking = pMaxKill
+
+    zombieDataAdvProb <- zombiesNthDayAdv(
+      rep(1, numOfObser), 
+      days=7, pKill = pCurrKill
+      )
+    
+    zeroZombiesLocations <- length(zombieDataAdvProb[zombieDataAdvProb == 0])
+    if(zeroZombiesLocations / length(zombieDataAdvProb) > percOfCleanPlaces){
+      pMaxKill = pCurrKill
+      pLastWorking = pCurrKill
+    } else {
+      pMinKill = pCurrKill
+    }
+    iterations <- iterations - 1
+    if(iterations < 0) { return(pLastWorking) }
+  }
+}
+
+#Use smaller third parameter to speed up simulation
+pMinimumToKill = computeMinimumReqKillProbability(0.1, 5, 250)
+pMinimumToKill
+```
+
+##3.e)
+Once again, the estimates for expected value can be calculated in a number of ways. Shown below are the three I've explained before. The only thing different from 3.a is that we need to generate new data with previously computed probability to kill.
+```{r}
+zombDataAdvPMin <- zombiesNthDayAdv(rep(1, 100), days=7, pKill=pMinimumToKill)
+paste("Point estimate: ", mean(zombDataAdvPMin))
+t.test(zombDataAdvPMin)
+
+intrerDivAdvPMin <- qnorm(0.975)*sqrt(var(zombDataAdvPMin) / length(zombDataAdvPMin))
+paste("CLT 95 % estimate: ", 
+      mean(zombDataAdvPMin) - intrerDivAdvPMin, 
+      mean(zombDataAdvPMin) + intrerDivAdvPMin
+      )
+```
