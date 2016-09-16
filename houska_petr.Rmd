@@ -59,7 +59,7 @@ paste("CLT 95 % estimate: ",
 ```
 
 ##2.b) Expected value hypothesis
-Yes, it is possible because 6 000 isn't in either of our 95 % intervals. Which means, that in case expected value is 6 000, the probability of getting the same data we got is lower than 5 percent (assuming we forget the parameters we used for the data generation).
+Yes, it is possible because 6 000 isn't in either of our 95 % intervals. Which means, that in case expected value is 6 000, the probability of getting the same (or more extreme) data we got is lower than 5 percent (assuming we forget the parameters we used for the data generation).
 
 ##2.c) Histogram
 Histogram of data:
